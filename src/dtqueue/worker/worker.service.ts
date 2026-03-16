@@ -7,6 +7,7 @@ import { Interval } from '@nestjs/schedule';
 @Injectable()
 export class WorkerService extends RedisConnectionService {
   private handlers = new Map<string, (payload: any) => Promise<void>>();
+  private stallThreshold = 30;
   constructor(configService: ConfigService) {
     super(configService);
     this.on('success', (jobData: Job<PayLoadType>) => {
@@ -56,6 +57,24 @@ export class WorkerService extends RedisConnectionService {
       } else {
         await this._client.lrem('processingQueue', 1, jobData);
         this.emit('exceeded', job);
+      }
+    }
+  }
+  isStalled(job: Job<PayLoadType>, seconds: number): boolean {
+    const now = new Date().getTime();
+    const timeIn = new Date(job.timeIn).getTime();
+    return (now - timeIn) / 1000 > seconds;
+  }
+
+  @Interval(60000)
+  async stalledDetection() {
+    const jobs = await this._client.lrange('processingQueue', 0, -1);
+    for (const job of jobs) {
+      const jobData = JSON.parse(job) as Job<PayLoadType>;
+      if (this.isStalled(jobData, this.stallThreshold)) {
+        jobData.state = 'waiting';
+        await this._client.rpush('waitingQueue', job);
+        await this._client.lrem('processingQueue', 1, job);
       }
     }
   }
