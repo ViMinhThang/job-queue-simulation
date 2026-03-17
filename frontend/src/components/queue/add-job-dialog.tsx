@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -9,141 +8,90 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Loader2, Wand2 } from 'lucide-react';
-import { AddJobRequest, generateRandomPayload, SAMPLE_JOB_NAMES } from '@/lib/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { SAMPLE_JOB_NAMES } from '@/lib/types';
 
 interface AddJobDialogProps {
-  onAddJob: (request: AddJobRequest) => Promise<void>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAddJob: (jobName: string, processingTime: number) => void;
 }
 
-export function AddJobDialog({ onAddJob }: AddJobDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [jobName, setJobName] = useState('processImage');
-  const [payload, setPayload] = useState(JSON.stringify(generateRandomPayload('processImage'), null, 2));
-  const [retryCount, setRetryCount] = useState('3');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function AddJobDialog({ open, onOpenChange, onAddJob }: AddJobDialogProps) {
+  const [jobName, setJobName] = useState(SAMPLE_JOB_NAMES[0]);
+  const [processingTime, setProcessingTime] = useState(3000);
 
-  const handleGeneratePayload = () => {
-    setPayload(JSON.stringify(generateRandomPayload(jobName), null, 2));
-  };
-
-  const handleJobNameChange = (value: string) => {
-    setJobName(value);
-    setPayload(JSON.stringify(generateRandomPayload(value), null, 2));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
-
-    try {
-      const parsedPayload = JSON.parse(payload);
-      await onAddJob({
-        jobName,
-        payload: parsedPayload,
-        options: { retryTime: parseInt(retryCount, 10) || 3 },
-      });
-      setOpen(false);
-      setJobName('processImage');
-      setPayload(JSON.stringify(generateRandomPayload('processImage'), null, 2));
-      setRetryCount('3');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid JSON payload');
-    } finally {
-      setIsSubmitting(false);
-    }
+    onAddJob(jobName, processingTime);
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Job
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
-        <form onSubmit={handleSubmit}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Add New Job</DialogTitle>
             <DialogDescription>
-              Create a new job to add to the queue.
+              Create a new job to be processed by the queue.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="jobName" className="text-right">
+            <div className="grid grid-cols-4 items-center gap-4 text-sm">
+              <Label htmlFor="name" className="text-right">
                 Job Name
               </Label>
-              <Input
-                id="jobName"
-                value={jobName}
-                onChange={(e) => handleJobNameChange(e.target.value)}
-                placeholder="e.g., processImage"
-                className="col-span-2"
-              />
-              <datalist id="job-names">
-                {SAMPLE_JOB_NAMES.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
+              <div className="col-span-3">
+                <Select value={jobName} onValueChange={(val) => val && setJobName(val)}>
+                  <SelectTrigger id="name" className="w-full">
+                    <SelectValue placeholder="Select job type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SAMPLE_JOB_NAMES.map((name: string) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="retryCount" className="text-right">
-                Max Retries
-              </Label>
-              <Input
-                id="retryCount"
-                type="number"
-                min="0"
-                max="10"
-                value={retryCount}
-                onChange={(e) => setRetryCount(e.target.value)}
-                className="col-span-3"
-              />
-            </div>
-
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="payload" className="text-right pt-2">
-                Payload
+            <div className="grid grid-cols-4 items-center gap-4 text-sm">
+              <Label htmlFor="time" className="text-right">
+                Process Time
               </Label>
               <div className="col-span-3 space-y-2">
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGeneratePayload}
-                  >
-                    <Wand2 className="h-3 w-3 mr-1" />
-                    Generate Random
-                  </Button>
-                </div>
-                <textarea
-                  id="payload"
-                  value={payload}
-                  onChange={(e) => setPayload(e.target.value)}
-                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono"
+                <Input
+                  id="time"
+                  type="number"
+                  value={processingTime}
+                  onChange={(e) => setProcessingTime(Number(e.target.value))}
+                  min={100}
+                  max={60000}
+                  step={50}
                 />
-                {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
+                <p className="text-[10px] text-muted-foreground">
+                  In milliseconds (3000ms = 3s)
+                </p>
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add Job
-            </Button>
+            <Button type="submit">Add Job</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -1,12 +1,17 @@
 import { UUID } from 'node:crypto';
 
-export interface PayLoadType {}
+export interface JobPayload {
+  processingTime?: number;
+  [key: string]: any;
+}
 
-export interface sendEmailPayLoad extends PayLoadType {
+export type PayLoadType = JobPayload;
+
+export interface sendEmailPayLoad extends JobPayload {
   to: string;
   subject: string;
 }
-export interface resizeImagePayLoad extends PayLoadType {
+export interface resizeImagePayLoad extends JobPayload {
   url: string;
   width: number;
 }

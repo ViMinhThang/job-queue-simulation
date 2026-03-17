@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState } from '@/lib/types';
-import { useQueueAPI, ConnectionMode, SimulationStatus } from '@/lib/api';
+import { useQueueAPI, SimulationStatus } from '@/lib/api';
 
 interface UseQueueReturn {
   jobs: Job[];
@@ -11,16 +11,11 @@ interface UseQueueReturn {
   simulationStatus: SimulationStatus;
   isLoading: boolean;
   error: string | null;
-  connectionMode: ConnectionMode;
   spawnRandomJob: () => Promise<void>;
   addJob: (request: AddJobRequest) => Promise<void>;
   deleteJob: (id: string) => Promise<void>;
-  moveJob: (id: string, newState: JobState) => Promise<void>;
   startWorker: () => Promise<void>;
   stopWorker: () => Promise<void>;
-  startSimulation: () => Promise<void>;
-  stopSimulation: () => Promise<void>;
-  setSimulateRate: (value: number) => Promise<void>;
   setConcurrency: (value: number) => Promise<void>;
   setProcessingSpeed: (value: number) => Promise<void>;
   clearCompleted: () => Promise<void>;
@@ -29,8 +24,8 @@ interface UseQueueReturn {
   refresh: () => void;
 }
 
-export function useQueue(connectionMode: ConnectionMode): UseQueueReturn {
-  const api = useQueueAPI(connectionMode);
+export function useQueue(): UseQueueReturn {
+  const api = useQueueAPI();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [stats, setStats] = useState<QueueStats>({ waiting: 0, processing: 0, stalled: 0, completed: 0, failed: 0 });
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus>({
@@ -93,11 +88,6 @@ export function useQueue(connectionMode: ConnectionMode): UseQueueReturn {
     refresh();
   };
 
-  const moveJob = async (id: string, newState: JobState) => {
-    await api.moveJob(id, newState);
-    refresh();
-  };
-
   const startWorker = async () => {
     await api.startWorker();
     refresh();
@@ -105,21 +95,6 @@ export function useQueue(connectionMode: ConnectionMode): UseQueueReturn {
 
   const stopWorker = async () => {
     await api.stopWorker();
-    refresh();
-  };
-
-  const startSimulation = async () => {
-    await api.startSimulation();
-    refresh();
-  };
-
-  const stopSimulation = async () => {
-    await api.stopSimulation();
-    refresh();
-  };
-
-  const setSimulateRate = async (value: number) => {
-    await api.setSimulateRate(value);
     refresh();
   };
 
@@ -155,16 +130,11 @@ export function useQueue(connectionMode: ConnectionMode): UseQueueReturn {
     simulationStatus,
     isLoading,
     error,
-    connectionMode,
     spawnRandomJob,
     addJob,
     deleteJob,
-    moveJob,
     startWorker,
     stopWorker,
-    startSimulation,
-    stopSimulation,
-    setSimulateRate,
     setConcurrency,
     setProcessingSpeed,
     clearCompleted,

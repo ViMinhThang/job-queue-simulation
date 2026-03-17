@@ -2,7 +2,7 @@ import { Job, JobState } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Clock, Trash2, ArrowRight, User } from 'lucide-react';
+import { Clock, Trash2, User } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -13,7 +13,6 @@ import {
 interface JobCardProps {
   job: Job;
   onDelete?: (id: string) => void;
-  onMove?: (id: string, newState: JobState) => void;
   compact?: boolean;
 }
 
@@ -42,53 +41,48 @@ function formatTimeAgo(date: Date): string {
   return `${hours}h`;
 }
 
-function getNextState(currentState: JobState): JobState | null {
-  const flow: Record<JobState, JobState | null> = {
-    waiting: 'processing',
-    processing: 'completed',
-    stalled: 'waiting',
-    completed: null,
-    failed: 'waiting',
-  };
-  return flow[currentState];
-}
-
-export function JobCard({ job, onDelete, onMove, compact = false }: JobCardProps) {
-  const nextState = getNextState(job.state);
+export function JobCard({ job, onDelete, compact = false }: JobCardProps) {
   const colors = stateColors[job.state];
 
   if (compact) {
     return (
       <div 
-        className="border-2 border-[#4A4A4A]/50 rounded-sm px-2 py-2 text-xs cursor-pointer hover:bg-muted/50 hover:shadow-sm transition-all bg-card flex flex-col gap-1"
-        onClick={(e) => {
-          if (onMove && nextState) {
-            e.stopPropagation();
-            onMove(job.id, nextState);
-          }
-        }}
+        className="border-2 border-[#4A4A4A]/50 rounded-sm px-2 py-2 text-xs hover:bg-muted/50 transition-all bg-card flex flex-col gap-1 relative group"
       >
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 pr-6">
           <span className={`w-2 h-2 rounded-full ${colors.bg}`} />
           <span className="font-semibold truncate">{job.jobName}</span>
         </div>
         <div className="text-[10px] text-muted-foreground truncate">
-          {JSON.stringify(job.payload).slice(0, 30)}
+          {typeof job.payload === 'object' ? JSON.stringify(job.payload).slice(0, 30) : String(job.payload)}
         </div>
         <div className="flex items-center justify-between mt-1 pt-1 border-t border-foreground/20">
-          <span className={`text-[10px] ${colors.text.replace('text-', 'text-')}`}>
+          <span className={`text-[10px] font-medium`}>
             {stateLabels[job.state]}
           </span>
           {job.workerId && (
             <span className="text-[10px] text-[#5D8AA8]">@{job.workerId}</span>
           )}
         </div>
+        
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(job.id);
+            }}
+            className="absolute top-1 right-1 p-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+            title="Delete job"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
       </div>
     );
   }
 
   return (
-    <Card className="mb-2 cursor-pointer hover:translate-x-0.5 hover:translate-y-0.5 transition-all border-2 border-foreground/60 shadow-[2px_2px_0_var(--foreground)]">
+    <Card className="mb-2 border-2 border-foreground/60 shadow-[2px_2px_0_var(--foreground)]">
       <CardContent className="p-3">
         <div className="flex items-start justify-between mb-2">
           <Badge className={`${colors.bg} ${colors.text} border-2 ${colors.border}`}>
@@ -114,8 +108,8 @@ export function JobCard({ job, onDelete, onMove, compact = false }: JobCardProps
         <div className="font-semibold text-sm mb-1">{job.jobName}</div>
         
         <div className="text-xs text-muted-foreground font-mono truncate mb-2">
-          {JSON.stringify(job.payload).slice(0, 40)}
-          {JSON.stringify(job.payload).length > 40 ? '...' : ''}
+          {typeof job.payload === 'object' ? JSON.stringify(job.payload).slice(0, 40) : String(job.payload)}
+          {typeof job.payload === 'object' && JSON.stringify(job.payload).length > 40 ? '...' : ''}
         </div>
 
         <div className="flex items-center justify-between">
@@ -132,26 +126,6 @@ export function JobCard({ job, onDelete, onMove, compact = false }: JobCardProps
           </div>
           
           <div className="flex items-center gap-1">
-            {nextState && onMove && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => onMove(job.id, nextState)}
-                    >
-                      <ArrowRight className="h-3 w-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Move to {stateLabels[nextState]}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            
             {onDelete && (
               <TooltipProvider>
                 <Tooltip>

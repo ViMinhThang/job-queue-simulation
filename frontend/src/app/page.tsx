@@ -2,21 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useQueue } from '@/lib/use-queue';
-import { detectConnectionMode } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { StatsCard } from '@/components/queue/stats-card';
 import { KanbanBoard } from '@/components/queue/kanban-board';
+import { AddJobDialog } from '@/components/queue/add-job-dialog';
 import { WorkerControls } from '@/components/worker/worker-controls';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Clock, Loader2, CheckCircle2, XCircle, Wifi, WifiOff, RefreshCw, Plus, AlertTriangle, GripVertical } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import type { ConnectionMode } from '@/lib/api';
+import { Clock, Loader2, CheckCircle2, XCircle, RefreshCw, Plus, AlertTriangle, GripVertical, Sparkles } from 'lucide-react';
+import { generateRandomPayload } from '@/lib/types';
 import {
   DndContext,
   closestCenter,
@@ -62,7 +56,7 @@ function DraggablePanel({ id, children, className }: DraggablePanelProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`${className} ${isDragging ? 'opacity-80' : ''}`}
+      className={cn("relative", className, isDragging && 'opacity-80')}
     >
       <div
         {...attributes}
@@ -80,10 +74,10 @@ const TOP_PANELS = ['waiting', 'processing', 'stalled', 'completed', 'failed'];
 const BOTTOM_PANELS = ['worker', 'queue'];
 
 export default function Dashboard() {
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('mock');
-  const [isDetecting, setIsDetecting] = useState(true);
   const [topPanelsOrder, setTopPanelsOrder] = useState(TOP_PANELS);
   const [bottomPanelsOrder, setBottomPanelsOrder] = useState(BOTTOM_PANELS);
+  const [isAddJobDialogOpen, setIsAddJobDialogOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -97,10 +91,7 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
-    detectConnectionMode().then((mode) => {
-      setConnectionMode(mode);
-      setIsDetecting(false);
-    });
+    setMounted(true);
   }, []);
 
   const {
@@ -110,22 +101,17 @@ export default function Dashboard() {
     simulationStatus,
     isLoading,
     error,
+    addJob,
     spawnRandomJob,
     deleteJob,
-    moveJob,
     startWorker,
     stopWorker,
-    startSimulation,
-    stopSimulation,
-    setSimulateRate,
     setConcurrency,
     clearCompleted,
     clearFailed,
     clearAll,
     refresh,
-  } = useQueue(connectionMode);
-
-  const isMockMode = connectionMode === 'mock';
+  } = useQueue();
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -208,14 +194,10 @@ export default function Dashboard() {
             simulationStatus={simulationStatus}
             onStartWorker={startWorker}
             onStopWorker={stopWorker}
-            onStartSimulation={startSimulation}
-            onStopSimulation={stopSimulation}
-            onSetSimulateRate={setSimulateRate}
             onSetConcurrency={setConcurrency}
             onClearCompleted={clearCompleted}
             onClearFailed={clearFailed}
             onClearAll={clearAll}
-            isMockMode={isMockMode}
           />
         );
       case 'queue':
@@ -228,7 +210,6 @@ export default function Dashboard() {
               <KanbanBoard
                 jobs={jobs}
                 onDeleteJob={deleteJob}
-                onMoveJob={moveJob}
               />
             </CardContent>
           </Card>
@@ -238,47 +219,31 @@ export default function Dashboard() {
     }
   };
 
+  if (!mounted) return null;
+
   return (
     <DndContext
+      id="queue-simulation-dnd"
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
     >
-      <div className="min-h-screen bg-background">
-        <header className="border-b-2 border-foreground/30">
+      <div className="min-h-screen bg-background text-foreground font-handwritten">
+        <header className="border-b-2 border-foreground/30 bg-background/50 backdrop-blur-sm sticky top-0 z-40">
           <div className="container mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h1 className="text-3xl font-bold tracking-wide">Job Queue</h1>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant={connectionMode === 'real' ? 'default' : 'outline'} className="gap-1">
-                      {isDetecting ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : connectionMode === 'real' ? (
-                        <Wifi className="h-3 w-3" />
-                      ) : (
-                        <WifiOff className="h-3 w-3" />
-                      )}
-                      {isDetecting ? 'Detecting...' : connectionMode === 'real' ? 'Connected' : 'Mock'}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      {connectionMode === 'real'
-                        ? 'Connected to real backend API'
-                        : 'Using in-memory mock service'}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
-              <Button size="sm" onClick={() => spawnRandomJob()}>
+              <Button variant="outline" size="sm" onClick={() => spawnRandomJob()} disabled={isLoading}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Quick Random
+              </Button>
+              <Button size="sm" onClick={() => setIsAddJobDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Job
               </Button>
@@ -288,16 +253,19 @@ export default function Dashboard() {
 
         <main className="container mx-auto px-6 py-6">
           {error && (
-            <Card className="mb-6 border-2 border-[#E74C3C]">
+            <Card className="mb-6 border-2 border-[#E74C3C] bg-[#E74C3C]/5">
               <CardContent className="pt-4">
-                <p className="text-[#E74C3C]">Error: {error}</p>
+                <p className="text-[#E74C3C] flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Error: {error}
+                </p>
               </CardContent>
             </Card>
           )}
 
           {/* Top Row - Stats */}
           <SortableContext items={topPanelsOrder} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-5 gap-4 mb-4">
+            <div className="grid grid-cols-5 gap-6 mb-8">
               {topPanelsOrder.map((id) => (
                 <DraggablePanel key={id} id={id}>
                   {renderPanel(id)}
@@ -308,15 +276,33 @@ export default function Dashboard() {
 
           {/* Bottom Row - Worker, Queue */}
           <SortableContext items={bottomPanelsOrder} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-10 gap-4 items-stretch">
+            <div className="grid grid-cols-10 gap-6 items-start">
               {bottomPanelsOrder.map((id) => (
-                <DraggablePanel key={id} id={id} className={id === 'queue' ? 'col-span-7' : 'col-span-3'}>
+                <DraggablePanel 
+                  key={id} 
+                  id={id} 
+                  className={id === 'queue' ? 'col-span-7' : 'col-span-3'}
+                >
                   {renderPanel(id)}
                 </DraggablePanel>
               ))}
             </div>
           </SortableContext>
         </main>
+
+        <AddJobDialog
+          open={isAddJobDialogOpen}
+          onOpenChange={setIsAddJobDialogOpen}
+          onAddJob={(jobName, processingTime) => {
+            addJob({
+              jobName,
+              payload: {
+                ...generateRandomPayload(jobName),
+                processingTime,
+              },
+            });
+          }}
+        />
       </div>
     </DndContext>
   );

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { EventEmitter } from 'supertest/lib/test';
+import { EventEmitter } from 'node:events';
 
 @Injectable()
 export class RedisConnectionService extends EventEmitter {

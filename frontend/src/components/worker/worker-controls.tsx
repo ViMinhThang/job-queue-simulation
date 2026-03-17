@@ -8,21 +8,17 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Play, Square, Zap, Gauge, Trash2, Sparkles } from 'lucide-react';
+import { Play, Square, Zap, Gauge, Trash2 } from 'lucide-react';
 
 interface WorkerControlsProps {
   workerStatus: WorkerStatus;
   simulationStatus: SimulationStatus;
   onStartWorker: () => Promise<void>;
   onStopWorker: () => Promise<void>;
-  onStartSimulation: () => Promise<void>;
-  onStopSimulation: () => Promise<void>;
-  onSetSimulateRate: (value: number) => Promise<void>;
   onSetConcurrency: (value: number) => Promise<void>;
   onClearCompleted: () => Promise<void>;
   onClearFailed: () => Promise<void>;
   onClearAll: () => Promise<void>;
-  isMockMode: boolean;
 }
 
 export function WorkerControls({
@@ -30,22 +26,18 @@ export function WorkerControls({
   simulationStatus,
   onStartWorker,
   onStopWorker,
-  onStartSimulation,
-  onStopSimulation,
-  onSetSimulateRate,
   onSetConcurrency,
   onClearCompleted,
   onClearFailed,
   onClearAll,
-  isMockMode,
 }: WorkerControlsProps) {
   return (
-    <Card className="border-2 border-foreground">
+    <Card className="border-2 border-foreground card">
       <CardHeader className="border-b-2 border-dashed border-foreground/30">
         <CardTitle className="flex items-center gap-2 text-xl">
           <Zap className="h-5 w-5" />
           Worker
-          <Badge variant={workerStatus.isRunning ? 'default' : 'outline'} className="ml-auto">
+          <Badge variant={workerStatus.isRunning ? 'default' : 'outline'} className="ml-auto badge-sketch">
             {workerStatus.isRunning ? 'Running' : 'Idle'}
           </Badge>
         </CardTitle>
@@ -71,62 +63,15 @@ export function WorkerControls({
           )}
         </div>
 
-        {isMockMode && (
-          <>
-            <Separator />
+        <Separator className="separator-sketch" />
 
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-lg flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  Auto-Simulate
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  {simulationStatus.isSimulating 
-                    ? `Every ${simulationStatus.simulateRate}ms` 
-                    : 'Spawn jobs automatically'}
-                </p>
-              </div>
-              {simulationStatus.isSimulating ? (
-                <Button variant="secondary" onClick={onStopSimulation} size="sm">
-                  <Square className="h-4 w-4 mr-1" />
-                  Stop
-                </Button>
-              ) : (
-                <Button variant="outline" onClick={onStartSimulation} size="sm">
-                  <Sparkles className="h-4 w-4 mr-1" />
-                  Simulate
-                </Button>
-              )}
-            </div>
-
-            {simulationStatus.isSimulating && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Spawn Rate</Label>
-                  <span className="text-sm font-mono">{simulationStatus.simulateRate}ms</span>
-                </div>
-                <Slider
-                  value={[simulationStatus.simulateRate]}
-                  min={500}
-                  max={10000}
-                  step={500}
-                  onValueChange={(value) => onSetSimulateRate(Array.isArray(value) ? value[0] : value)}
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        <Separator />
-
-        <div className="space-y-2">
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Gauge className="h-4 w-4" />
-              <Label>Concurrency</Label>
+              <Gauge className="h-4 w-4 text-primary" />
+              <Label className="text-base">Concurrency</Label>
             </div>
-            <span className="text-sm font-bold">{workerStatus.concurrency}</span>
+            <span className="text-sm font-bold bg-secondary px-2 py-0.5 rounded">{workerStatus.concurrency}</span>
           </div>
           <Slider
             value={[workerStatus.concurrency]}
@@ -138,37 +83,52 @@ export function WorkerControls({
           />
         </div>
 
-        <Separator />
+        <Separator className="separator-sketch" />
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label className="text-lg">Stats</Label>
-          <div className="grid grid-cols-2 gap-4 text-base">
-            <div>
-              <span className="text-muted-foreground">Jobs/min:</span>{' '}
-              <span className="font-bold">{workerStatus.jobsProcessedPerMinute}</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-secondary/30 p-2 rounded border border-foreground/10">
+              <div className="text-xs text-muted-foreground uppercase">Jobs/min</div>
+              <div className="text-xl font-bold">{workerStatus.jobsProcessedPerMinute}</div>
             </div>
-            <div>
-              <span className="text-muted-foreground">Avg wait:</span>{' '}
-              <span className="font-bold">{workerStatus.averageWaitTime}ms</span>
+            <div className="bg-secondary/30 p-2 rounded border border-foreground/10">
+              <div className="text-xs text-muted-foreground uppercase">Avg wait</div>
+              <div className="text-xl font-bold">{workerStatus.averageWaitTime}ms</div>
             </div>
           </div>
         </div>
 
-        <Separator />
+        <Separator className="separator-sketch" />
 
-        <div className="space-y-2">
-          <Label className="text-lg">Clear</Label>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={onClearCompleted}>
-              <Trash2 className="h-3 w-3 mr-1" />
+        <div className="space-y-3 pt-2">
+          <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/70">Clear Queue</div>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onClearCompleted}
+              className="flex-1 px-3 py-2 h-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
               Done
             </Button>
-            <Button variant="outline" size="sm" onClick={onClearFailed}>
-              <Trash2 className="h-3 w-3 mr-1" />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onClearFailed}
+              className="flex-1 px-3 py-2 h-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
               Failed
             </Button>
-            <Button variant="outline" size="sm" onClick={onClearAll}>
-              <Trash2 className="h-3 w-3 mr-1" />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onClearAll}
+              className="flex-1 px-3 py-2 h-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
               All
             </Button>
           </div>

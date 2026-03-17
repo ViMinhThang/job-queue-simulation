@@ -4,18 +4,20 @@ import { RedisConnectionService } from '../redis-connection/redis-connection.ser
 import { Job, PayLoadType } from '../queue/interfaces/queue-job';
 import { Interval } from '@nestjs/schedule';
 import { randomUUID } from 'node:crypto';
+import { STALL_THRESHOLD_SECONDS } from '../queue/queue.service';
 
 @Injectable()
 export class WorkerService extends RedisConnectionService {
   private handlers = new Map<string, (payload: any) => Promise<void>>();
-  private stallThreshold = 30;
+  private stallThreshold = STALL_THRESHOLD_SECONDS;
   private lockId: string;
   private isRunning = false;
-  private processingIntervals: NodeJS.Timeout[] = [];
+  private concurrency = 4;
+  private processingSpeed = 1000;
   constructor(configService: ConfigService) {
     super(configService);
-    this.on('success', (jobData: Job<PayLoadType>) => {
-      void this._client.lrem('processingQueue', 1, JSON.stringify(jobData));
+    this.on('success', (job: Job<PayLoadType>) => {
+      // Nothing special here, just cleanup elsewhere
     });
     this.on('failed', (job: Job<PayLoadType>) => {
       console.warn(
@@ -31,8 +33,13 @@ export class WorkerService extends RedisConnectionService {
       void this._client.rpush('failedQueue', JSON.stringify(job));
     });
   }
+  private async simulateIO(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   @Interval(5000)
   async processJob() {
+    if (!this.isRunning) return;
     const jobData: string = await this._client.lmove(
       'waitingQueue',
       'processingQueue',
@@ -40,26 +47,40 @@ export class WorkerService extends RedisConnectionService {
       'LEFT',
     );
     if (!jobData) return;
-    const job = JSON.parse(jobData) as Job<PayLoadType>;
 
-    const func = this.handlers.get(job.jobName);
-    if (!func) {
-      console.warn(`No handler registered for job: ${job.jobName}`);
-      return;
-    }
+    const job = JSON.parse(jobData) as Job<PayLoadType>;
+    const processingTime = job.payload.processingTime || 3000;
+
+    console.log(`[Worker] Started processing: ${job.jobName} (ID: ${job.id})`);
+    console.log(`[Worker] Simulating I/O for ${processingTime}ms...`);
+
     try {
-      await func(job.payload);
-      this.emit('success', jobData);
+      // Simulation triggers
+      if (job.jobName === 'failMe') {
+        throw new Error('Simulated job failure');
+      }
+      
+      const actualProcessingTime = job.jobName === 'stallMe' ? 40000 : processingTime;
+
+      await this.simulateIO(actualProcessingTime);
+
+      console.log(`[Worker] Finished: ${job.jobName} (ID: ${job.id})`);
+
+      await this._client.lrem('processingQueue', 1, jobData);
+      job.state = 'completed';
+      await this._client.rpush('completedQueue', JSON.stringify(job));
+      this.emit('success', job);
     } catch (e) {
+      console.error(`[Worker] Error in job ${job.jobName}:`, e);
       job.retryCount += 1;
       job.state = 'failed';
 
+      await this._client.lrem('processingQueue', 1, jobData);
+
       if (job.retryCount < job.options.retryTime) {
-        await this._client.lrem('processingQueue', 1, jobData);
         await this._client.rpush('waitingQueue', JSON.stringify(job));
         this.emit('failed', job);
       } else {
-        await this._client.lrem('processingQueue', 1, jobData);
         this.emit('exceeded', job);
       }
     }
@@ -100,13 +121,19 @@ export class WorkerService extends RedisConnectionService {
       }, 10000);
       if (aquired) {
         const jobs = await this._client.lrange('processingQueue', 0, -1);
+        let recoveredCount = 0;
         for (const job of jobs) {
           const jobData = JSON.parse(job) as Job<PayLoadType>;
           if (this.isStalled(jobData, this.stallThreshold)) {
+            recoveredCount++;
             jobData.state = 'waiting';
             await this._client.rpush('waitingQueue', job);
             await this._client.lrem('processingQueue', 1, job);
           }
+        }
+        if (recoveredCount > 0) {
+          console.log(`[Worker] Detected and recovered ${recoveredCount} stalled jobs.`);
+          await this._client.set('stats:last_stalled_recovery', recoveredCount);
         }
       }
     } finally {
@@ -118,10 +145,29 @@ export class WorkerService extends RedisConnectionService {
   register(jobName: string, handler: (payload: PayLoadType) => Promise<void>) {
     this.handlers.set(jobName, handler);
   }
-  @Interval(5000)
-  async processJobs(concurrency: number = 4) {
-    const jobs = Array(Math.min(concurrency, 10)).fill(null);
+  @Interval(1000) // Run more frequently
+  async processJobs() {
+    if (!this.isRunning) return;
+    const jobs = Array(Math.min(this.concurrency, 10)).fill(null);
     await Promise.all(jobs.map(() => this.processJob()));
+  }
+
+  getWorkerStatus() {
+    return {
+      isRunning: this.isRunning,
+      concurrency: this.concurrency,
+      processingSpeed: this.processingSpeed,
+      jobsProcessedPerMinute: 0, // Placeholder or implement tracking
+      averageWaitTime: 0, // Placeholder or implement tracking
+    };
+  }
+
+  setConcurrency(value: number) {
+    this.concurrency = Math.max(1, Math.min(10, value));
+  }
+
+  setProcessingSpeed(value: number) {
+    this.processingSpeed = Math.max(100, Math.min(10000, value));
   }
 
   async startWorker(): Promise<{ message: string }> {
@@ -130,9 +176,8 @@ export class WorkerService extends RedisConnectionService {
   }
 
   async stopWorker(): Promise<{ message: string }> {
+    console.log('[Worker] Stopping worker...');
     this.isRunning = false;
-    this.processingIntervals.forEach((interval) => clearInterval(interval));
-    this.processingIntervals = [];
     return { message: 'Worker stopped' };
   }
 }

@@ -5,9 +5,10 @@ import { WorkerService } from './worker/worker.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WorkerController } from './worker/worker.controller';
 import { QueueController } from './queue/queue.controller';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [ScheduleModule.forRoot()],
+  imports: [ScheduleModule.forRoot(), ConfigModule],
   providers: [QueueService, RedisConnectionService, WorkerService],
   exports: [QueueService, RedisConnectionService],
   controllers: [WorkerController, QueueController],

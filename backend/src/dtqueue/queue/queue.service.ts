@@ -10,20 +10,11 @@ export interface QueueStats {
   completed: number;
   failed: number;
   stalled: number;
+  lastRecoveredCount: number;
 }
 
-const SAMPLE_JOBS = [
-  'processImage',
-  'sendNotification',
-  'generateReport',
-  'syncData',
-  'backupDatabase',
-  'sendEmail',
-  'processPayment',
-  'validateUser',
-  'cacheWarmup',
-  'runAnalytics',
-];
+export const STALL_THRESHOLD_SECONDS = 30;
+
 
 @Injectable()
 export class QueueService extends RedisConnectionService {
@@ -49,65 +40,114 @@ export class QueueService extends RedisConnectionService {
     await this._client.rpush('waitingQueue', JSON.stringify(job));
     console.log(`${jobName} has been added`);
     this.emit('added', job);
+    return job;
   }
 
   async getStats(): Promise<QueueStats> {
-    // TODO: Implement - return counts from Redis queues
+    const [waiting, processing, completed, failed, lastRecovered] = await Promise.all([
+      this._client.llen('waitingQueue'),
+      this._client.llen('processingQueue'),
+      this._client.llen('completedQueue'),
+      this._client.llen('failedQueue'),
+      this._client.get('stats:last_stalled_recovery'),
+    ]);
+
+    const processingJobs = await this._client.lrange('processingQueue', 0, -1);
+    let stalled = 0;
+    const now = new Date().getTime();
+    for (const jobStr of processingJobs) {
+      const job = JSON.parse(jobStr) as Job<PayLoadType>;
+      if ((now - new Date(job.timeIn).getTime()) / 1000 > STALL_THRESHOLD_SECONDS) {
+        stalled++;
+      }
+    }
+
     return {
-      waiting: 0,
-      processing: 0,
-      completed: 0,
-      failed: 0,
-      stalled: 0,
+      waiting,
+      processing,
+      completed,
+      failed,
+      stalled,
+      lastRecoveredCount: parseInt(lastRecovered || '0'),
     };
   }
 
-  async getAllJobs(state?: string): Promise<Job[]> {
-    // TODO: Implement - return jobs from Redis queues
-    return [];
+  async getAllJobs(state?: string): Promise<Job<PayLoadType>[]> {
+    const queueNames = state
+      ? [`${state}Queue`]
+      : ['waitingQueue', 'processingQueue', 'completedQueue', 'failedQueue'];
+
+    const allJobs: Job<PayLoadType>[] = [];
+
+    for (const queueName of queueNames) {
+      const items = await this._client.lrange(queueName, 0, -1);
+      for (const item of items) {
+        try {
+          const job = JSON.parse(item) as Job<PayLoadType>;
+          // Sync state with queue name just in case
+          if (queueName === 'waitingQueue') job.state = 'waiting';
+          else if (queueName === 'processingQueue') job.state = 'processing';
+          else if (queueName === 'completedQueue') job.state = 'completed';
+          else if (queueName === 'failedQueue') job.state = 'failed';
+
+          allJobs.push(job);
+        } catch (e) {
+          console.error(`Failed to parse job from ${queueName}:`, item);
+        }
+      }
+    }
+
+    return allJobs;
   }
 
-  async spawnRandomJob(
-    jobName?: string,
-    processingTime?: number,
-  ): Promise<Job> {
-    // TODO: Implement
-    // 1. Generate random job or use provided jobName
-    // 2. Add to waitingQueue with processingTime in payload
-    // 3. Set up setTimeout to simulate I/O
-    // 4. After timeout, move to completed (or failed ~10%)
-    const id = randomUUID();
-    return {
-      id,
-      jobName:
-        jobName || SAMPLE_JOBS[Math.floor(Math.random() * SAMPLE_JOBS.length)],
+  async spawnJob(
+    jobName: string,
+    processingTime: number,
+  ): Promise<Job<PayLoadType>> {
+    const job: Job<PayLoadType> = {
+      id: randomUUID(),
+      jobName: jobName,
       retryCount: 0,
       state: 'waiting',
       timeIn: new Date(),
       payload: {
-        processingTime: processingTime || 3000,
-      } as unknown as PayLoadType,
+        processingTime: processingTime,
+      },
       options: { retryTime: 3 },
     };
+    await this._client.rpush('waitingQueue', JSON.stringify(job));
+    console.log(`${job.jobName} has been spawned`);
+    this.emit('added', job);
+    return job;
   }
 
   async deleteJob(id: string): Promise<void> {
-    // TODO: Implement - remove job from all queues
-  }
-
-  async moveJob(id: string, state: string): Promise<void> {
-    // TODO: Implement - move job to different queue
+    const queueNames = ['waitingQueue', 'processingQueue', 'completedQueue', 'failedQueue'];
+    for (const queueName of queueNames) {
+      const items = await this._client.lrange(queueName, 0, -1);
+      for (const item of items) {
+        const job = JSON.parse(item) as Job<PayLoadType>;
+        if (job.id === id) {
+          await this._client.lrem(queueName, 1, item);
+          return;
+        }
+      }
+    }
   }
 
   async clearCompleted(): Promise<void> {
-    // TODO: Implement - clear completed queue
+    await this._client.del('completedQueue');
   }
 
   async clearFailed(): Promise<void> {
-    // TODO: Implement - clear failed queue
+    await this._client.del('failedQueue');
   }
 
   async clearAll(): Promise<void> {
-    // TODO: Implement - clear all queues
+    await this._client.del('waitingQueue');
+    await this._client.del('processingQueue');
+    await this._client.del('completedQueue');
+    await this._client.del('failedQueue');
+    await this._client.del('stats:last_stalled_recovery');
   }
 }

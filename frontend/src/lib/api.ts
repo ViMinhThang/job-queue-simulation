@@ -1,9 +1,6 @@
 import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState } from './types';
-import { mockQueueService } from './mock-service';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-export type ConnectionMode = 'real' | 'mock';
 
 export interface SimulationStatus {
   isSimulating: boolean;
@@ -19,12 +16,8 @@ export interface QueueAPI {
   spawnRandomJob: () => Promise<Job>;
   addJob: (request: AddJobRequest) => Promise<Job>;
   deleteJob: (id: string) => Promise<void>;
-  moveJob: (id: string, newState: JobState) => Promise<void>;
   startWorker: () => Promise<void>;
   stopWorker: () => Promise<void>;
-  startSimulation: () => Promise<void>;
-  stopSimulation: () => Promise<void>;
-  setSimulateRate: (value: number) => Promise<void>;
   setConcurrency: (value: number) => Promise<void>;
   setProcessingSpeed: (value: number) => Promise<void>;
   clearCompleted: () => Promise<void>;
@@ -87,15 +80,6 @@ const realAPI: QueueAPI = {
     if (!res.ok) throw new Error('Failed to delete job');
   },
 
-  async moveJob(id: string, newState: JobState) {
-    const res = await fetch(`${API_BASE}/queue/jobs/${id}/move`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state: newState }),
-    });
-    if (!res.ok) throw new Error('Failed to move job');
-  },
-
   async startWorker() {
     const res = await fetch(`${API_BASE}/worker/start`, {
       method: 'POST',
@@ -108,18 +92,6 @@ const realAPI: QueueAPI = {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to stop worker');
-  },
-
-  async startSimulation() {
-    throw new Error('Simulation not available in real mode');
-  },
-
-  async stopSimulation() {
-    throw new Error('Simulation not available in real mode');
-  },
-
-  async setSimulateRate(_value: number) {
-    throw new Error('Simulation not available in real mode');
   },
 
   async setConcurrency(value: number) {
@@ -166,43 +138,8 @@ const realAPI: QueueAPI = {
   },
 };
 
-const mockAPI: QueueAPI = {
-  getAllJobs: () => Promise.resolve(mockQueueService.getAllJobs()),
-  getJobsByState: (state) => Promise.resolve(mockQueueService.getJobsByState(state)),
-  getQueueStats: () => Promise.resolve(mockQueueService.getQueueStats()),
-  getWorkerStatus: () => Promise.resolve(mockQueueService.getWorkerStatus()),
-  getSimulationStatus: () => Promise.resolve(mockQueueService.getSimulationStatus()),
-  spawnRandomJob: () => mockQueueService.spawnRandomJob(),
-  addJob: (request) => mockQueueService.addJob(request),
-  deleteJob: (id) => mockQueueService.deleteJob(id),
-  moveJob: (id, newState) => mockQueueService.moveJob(id, newState),
-  startWorker: () => mockQueueService.startWorker(),
-  stopWorker: () => mockQueueService.stopWorker(),
-  startSimulation: () => mockQueueService.simulateJobs(true),
-  stopSimulation: () => mockQueueService.simulateJobs(false),
-  setSimulateRate: (value) => Promise.resolve(mockQueueService.setSimulateRate(value)),
-  setConcurrency: (value) => Promise.resolve(mockQueueService.setConcurrency(value)),
-  setProcessingSpeed: (value) => Promise.resolve(mockQueueService.setProcessingSpeed(value)),
-  clearCompleted: () => mockQueueService.clearCompleted(),
-  clearFailed: () => mockQueueService.clearFailed(),
-  clearAll: () => mockQueueService.clearAll(),
-  subscribe: (listener) => mockQueueService.subscribe(listener),
-};
-
-export async function detectConnectionMode(): Promise<ConnectionMode> {
-  try {
-    const res = await fetch(`${API_BASE}/queue/status`, { 
-      method: 'HEAD',
-      signal: AbortSignal.timeout(2000) 
-    });
-    return res.ok ? 'real' : 'mock';
-  } catch {
-    return 'mock';
-  }
+export function useQueueAPI(): QueueAPI {
+  return realAPI;
 }
 
-export function useQueueAPI(mode: ConnectionMode): QueueAPI {
-  return mode === 'real' ? realAPI : mockAPI;
-}
-
-export { realAPI, mockAPI };
+export { realAPI };

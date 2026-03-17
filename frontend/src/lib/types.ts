@@ -48,6 +48,8 @@ export const SAMPLE_JOB_NAMES = [
   'validateUser',
   'cacheWarmup',
   'runAnalytics',
+  'failMe',
+  'stallMe',
 ];
 
 export function generateRandomPayload(jobName: string): Record<string, unknown> {
