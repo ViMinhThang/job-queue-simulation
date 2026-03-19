@@ -35,16 +35,15 @@ export class QueueController {
   @Post('spawn')
   async spawnJobs(@Body() body?: { jobName: string; processingTime: number }[]) {
     if (!body || !Array.isArray(body)) {
-      // Spawn a single random job if no body provided
       const sampleNames = ['processImage', 'sendNotification', 'generateReport', 'syncData', 'backupDatabase'];
       const jobName = sampleNames[Math.floor(Math.random() * sampleNames.length)];
       const processingTime = Math.floor(Math.random() * 5000) + 1000;
-      return await this.queueService.spawnJob(jobName, processingTime);
+      return await this.queueService.addJob(jobName, { processingTime }, { retryTime: 3 });
     }
 
     return Promise.all(
       body.map((job) =>
-        this.queueService.spawnJob(job.jobName, job.processingTime),
+        this.queueService.addJob(job.jobName, { processingTime: job.processingTime }, { retryTime: 3 }),
       ),
     );
   }
