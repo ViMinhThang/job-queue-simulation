@@ -8,6 +8,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { QueueService } from './queue.service';
+import {
+  validateAddJobBody,
+  validateBenchmarkBody,
+  validateSpawnJobsBody,
+  validateStateQuery,
+} from '../validation/request-validation';
 
 @Controller('queue')
 export class QueueController {
@@ -19,22 +25,25 @@ export class QueueController {
   }
 
   @Get('jobs')
-  getJobs(@Query('state') state: string) {
-    return this.queueService.getAllJobs(state);
+  getJobs(@Query('state') state?: string) {
+    const validatedState = validateStateQuery(state);
+    return this.queueService.getAllJobs(validatedState);
   }
 
   @Post('jobs')
-  addJob(@Body() body: { jobName: string; payload: any; options?: any }) {
+  addJob(@Body() body: unknown) {
+    const validatedBody = validateAddJobBody(body);
     return this.queueService.addJob(
-      body.jobName,
-      body.payload,
-      body.options || { retryTime: 3 },
+      validatedBody.jobName,
+      validatedBody.payload,
+      validatedBody.options,
     );
   }
 
   @Post('spawn')
-  async spawnJobs(@Body() body?: { jobName: string; processingTime: number }[]) {
-    if (!body || !Array.isArray(body)) {
+  async spawnJobs(@Body() body?: unknown) {
+    const validatedBody = validateSpawnJobsBody(body);
+    if (validatedBody === null) {
       const sampleNames = ['processImage', 'sendNotification', 'generateReport', 'syncData', 'backupDatabase'];
       const jobName = sampleNames[Math.floor(Math.random() * sampleNames.length)];
       const processingTime = Math.floor(Math.random() * 5000) + 1000;
@@ -42,7 +51,7 @@ export class QueueController {
     }
 
     return Promise.all(
-      body.map((job) =>
+      validatedBody.map((job) =>
         this.queueService.addJob(job.jobName, { processingTime: job.processingTime }, { retryTime: 3 }),
       ),
     );
@@ -63,47 +72,46 @@ export class QueueController {
     return this.queueService.clearFailed();
   }
 
+  @Delete('stalled')
+  clearStalled() {
+    return this.queueService.clearStalled();
+  }
+
   @Delete('all')
   clearAll() {
     return this.queueService.clearAll();
   }
 
   @Post('benchmark')
-  async runBenchmark(
-    @Body()
-    body: {
-      success: { count: number; processingTime: number };
-      failed: { count: number; processingTime: number };
-      stalled: { count: number; processingTime: number };
-    },
-  ) {
+  async runBenchmark(@Body() body: unknown) {
+    const validatedBody = validateBenchmarkBody(body);
     const jobs: Promise<any>[] = [];
 
-    for (let i = 0; i < body.success.count; i++) {
+    for (let i = 0; i < validatedBody.success.count; i++) {
       jobs.push(
         this.queueService.addJob(
           'benchmark_success',
-          { processingTime: body.success.processingTime },
+          { processingTime: validatedBody.success.processingTime },
           { retryTime: 3 },
         ),
       );
     }
 
-    for (let i = 0; i < body.failed.count; i++) {
+    for (let i = 0; i < validatedBody.failed.count; i++) {
       jobs.push(
         this.queueService.addJob(
           'failMe',
-          { processingTime: body.failed.processingTime },
+          { processingTime: validatedBody.failed.processingTime },
           { retryTime: 3 },
         ),
       );
     }
 
-    for (let i = 0; i < body.stalled.count; i++) {
+    for (let i = 0; i < validatedBody.stalled.count; i++) {
       jobs.push(
         this.queueService.addJob(
           'stallMe',
-          { processingTime: body.stalled.processingTime },
+          { processingTime: validatedBody.stalled.processingTime },
           { retryTime: 3 },
         ),
       );

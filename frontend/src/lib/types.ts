@@ -26,7 +26,6 @@ export interface QueueStats {
 export interface WorkerStatus {
   isRunning: boolean;
   concurrency: number;
-  processingSpeed: number;
   jobsProcessedPerMinute: number;
   averageWaitTime: number;
 }

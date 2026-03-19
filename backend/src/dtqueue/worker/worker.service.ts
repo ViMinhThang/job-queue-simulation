@@ -14,7 +14,6 @@ export class WorkerService extends EventEmitter {
   private lockId: string;
   private isRunning = false;
   private concurrency = 4;
-  private processingSpeed = 1000;
 
   constructor(private readonly redis: RedisConnectionService) {
     super();
@@ -39,7 +38,16 @@ export class WorkerService extends EventEmitter {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private async runWithHeartBeat(job: Job<PayLoadType>, processingTime: number): Promise<void> {
+  private async runWithHeartBeat(
+    job: Job<PayLoadType>,
+    processingTime: number,
+    withHeartbeat = true,
+  ): Promise<void> {
+    if (!withHeartbeat) {
+      await this.simulateIO(processingTime);
+      return;
+    }
+
     const heartbeatKey = `heartbeat:${job.id}`;
     const interval = setInterval(() => {
       void this.redis.client.set(heartbeatKey, Date.now(), 'EX', this.stallThreshold);
@@ -55,7 +63,7 @@ export class WorkerService extends EventEmitter {
 
   async processJob() {
     if (!this.isRunning) return;
-    const jobData: string = await this.redis.client.lmove(
+    const jobData = await this.redis.client.lmove(
       'waitingQueue',
       'processingQueue',
       'LEFT',
@@ -64,23 +72,35 @@ export class WorkerService extends EventEmitter {
     if (!jobData) return;
 
     const job = JSON.parse(jobData) as Job<PayLoadType>;
+    job.state = 'processing';
+    job.timeIn = new Date();
     const processingTime = job.payload.processingTime || 3000;
+    const isStallScenario = job.jobName === 'stallMe';
+    const minStallDurationMs = (this.stallThreshold + 35) * 1000;
+    const actualProcessingTime = isStallScenario
+      ? Math.max(processingTime, minStallDurationMs)
+      : processingTime;
 
     this.logger.log(`Started processing: ${job.jobName} (ID: ${job.id})`);
-    this.logger.log(`Simulating I/O for ${processingTime}ms...`);
+    this.logger.log(`Simulating I/O for ${actualProcessingTime}ms...`);
 
     try {
       if (job.jobName === 'failMe') {
         throw new Error('Simulated job failure');
       }
 
-      const actualProcessingTime = job.jobName === 'stallMe' ? 40000 : processingTime;
-
-      await this.runWithHeartBeat(job, actualProcessingTime);
+      await this.runWithHeartBeat(job, actualProcessingTime, !isStallScenario);
 
       this.logger.log(`Finished: ${job.jobName} (ID: ${job.id})`);
 
-      await this.redis.client.lrem('processingQueue', 1, jobData);
+      const removed = await this.redis.client.lrem('processingQueue', 1, jobData);
+      if (removed === 0) {
+        this.logger.warn(
+          `Job ${job.id} was already removed from processingQueue (likely marked stalled).`,
+        );
+        return;
+      }
+
       job.state = 'completed';
       await this.redis.client.rpush('completedQueue', JSON.stringify(job));
       this.emit('success', job);
@@ -89,7 +109,13 @@ export class WorkerService extends EventEmitter {
       job.retryCount += 1;
       job.state = 'failed';
 
-      await this.redis.client.lrem('processingQueue', 1, jobData);
+      const removed = await this.redis.client.lrem('processingQueue', 1, jobData);
+      if (removed === 0) {
+        this.logger.warn(
+          `Job ${job.id} was already removed from processingQueue (likely marked stalled).`,
+        );
+        return;
+      }
 
       if (job.retryCount < job.options.retryTime) {
         await this.redis.client.rpush('waitingQueue', JSON.stringify(job));
@@ -147,14 +173,18 @@ export class WorkerService extends EventEmitter {
       for (const job of jobs) {
         const jobData = JSON.parse(job) as Job<PayLoadType>;
         if (await this.isStalled(jobData)) {
+          const removed = await this.redis.client.lrem('processingQueue', 1, job);
+          if (removed === 0) {
+            continue;
+          }
+
           recoveredCount++;
-          jobData.state = 'waiting';
-          await this.redis.client.rpush('waitingQueue', job);
-          await this.redis.client.lrem('processingQueue', 1, job);
+          jobData.state = 'stalled';
+          await this.redis.client.rpush('stalledQueue', JSON.stringify(jobData));
         }
       }
       if (recoveredCount > 0) {
-        this.logger.log(`Detected and recovered ${recoveredCount} stalled jobs.`);
+        this.logger.log(`Detected and moved ${recoveredCount} stalled jobs.`);
         await this.redis.client.set('stats:last_stalled_recovery', recoveredCount);
       }
     } finally {
@@ -175,18 +205,32 @@ export class WorkerService extends EventEmitter {
     return {
       isRunning: this.isRunning,
       concurrency: this.concurrency,
-      processingSpeed: this.processingSpeed,
       jobsProcessedPerMinute: 0,
       averageWaitTime: 0,
     };
   }
 
   async getActiveHeartbeats(): Promise<{ jobId: string; lastPing: number }[]> {
-    const keys = await this.redis.client.keys('heartbeat:*');
-    if (keys.length === 0) return [];
+    let cursor = '0';
+    const keys: string[] = [];
+
+    do {
+      const [nextCursor, batch] = await this.redis.client.scan(
+        cursor,
+        'MATCH',
+        'heartbeat:*',
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+      keys.push(...batch);
+    } while (cursor !== '0');
+
+    const uniqueKeys = [...new Set(keys)];
+    if (uniqueKeys.length === 0) return [];
     
-    const values = await this.redis.client.mget(keys);
-    return keys
+    const values = await this.redis.client.mget(uniqueKeys);
+    return uniqueKeys
       .map((key, i) => ({
         jobId: key.replace('heartbeat:', ''),
         lastPing: Number(values[i]),
@@ -196,10 +240,6 @@ export class WorkerService extends EventEmitter {
 
   setConcurrency(value: number) {
     this.concurrency = Math.max(1, Math.min(10, value));
-  }
-
-  setProcessingSpeed(value: number) {
-    this.processingSpeed = Math.max(100, Math.min(10000, value));
   }
 
   async startWorker(): Promise<{ message: string }> {

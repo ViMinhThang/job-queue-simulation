@@ -7,6 +7,13 @@ export interface JobPayload {
 
 export type PayLoadType = JobPayload;
 
+export type JobState =
+  | 'waiting'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'stalled';
+
 export interface sendEmailPayLoad extends JobPayload {
   to: string;
   subject: string;
@@ -21,7 +28,7 @@ export interface Job<T extends PayLoadType> {
   jobName: string;
   retryCount: number;
   timeIn: Date;
-  state: string;
+  state: JobState;
   payload: T;
   options: JobOptions;
 }

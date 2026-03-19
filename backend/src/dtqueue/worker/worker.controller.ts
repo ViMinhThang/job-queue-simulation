@@ -1,13 +1,17 @@
 import { Controller, Post, Body, Get } from '@nestjs/common';
 import { WorkerService } from './worker.service';
+import {
+  validateSetConcurrencyBody,
+  validateStartWorkerBody,
+} from '../validation/request-validation';
 
 @Controller('worker')
 export class WorkerController {
   constructor(private readonly workerService: WorkerService) {}
 
   @Post('start')
-  async startWorkerWithConcurrency(@Body() body?: { concurrency?: number }) {
-    const concurrency = (body && body.concurrency) ? body.concurrency : 4;
+  async startWorkerWithConcurrency(@Body() body?: unknown) {
+    const { concurrency } = validateStartWorkerBody(body);
     await this.workerService.startWorker();
     this.workerService.setConcurrency(concurrency);
     return { status: 'started', concurrency };
@@ -24,15 +28,10 @@ export class WorkerController {
   }
 
   @Post('concurrency')
-  setConcurrency(@Body() body: { value: number }) {
-    this.workerService.setConcurrency(body.value);
-    return { status: 'updated', concurrency: body.value };
-  }
-
-  @Post('speed')
-  setSpeed(@Body() body: { value: number }) {
-    this.workerService.setProcessingSpeed(body.value);
-    return { status: 'updated', speed: body.value };
+  setConcurrency(@Body() body: unknown) {
+    const { value } = validateSetConcurrencyBody(body);
+    this.workerService.setConcurrency(value);
+    return { status: 'updated', concurrency: value };
   }
 
   @Post('stop')

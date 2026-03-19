@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig, Heartbeat } from '@/lib/types';
+import { Job, QueueStats, WorkerStatus, AddJobRequest, BenchmarkConfig, Heartbeat } from '@/lib/types';
 import { useQueueAPI, SimulationStatus } from '@/lib/api';
 
 interface UseQueueReturn {
@@ -18,8 +18,8 @@ interface UseQueueReturn {
   startWorker: () => Promise<void>;
   stopWorker: () => Promise<void>;
   setConcurrency: (value: number) => Promise<void>;
-  setProcessingSpeed: (value: number) => Promise<void>;
   clearCompleted: () => Promise<void>;
+  clearStalled: () => Promise<void>;
   clearFailed: () => Promise<void>;
   clearAll: () => Promise<void>;
   runBenchmark: (config: BenchmarkConfig) => Promise<void>;
@@ -33,7 +33,6 @@ export function useQueue(): UseQueueReturn {
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus>({
     isRunning: false,
     concurrency: 4,
-    processingSpeed: 1000,
     jobsProcessedPerMinute: 0,
     averageWaitTime: 0,
   });
@@ -108,13 +107,13 @@ export function useQueue(): UseQueueReturn {
     refresh();
   };
 
-  const setProcessingSpeed = async (value: number) => {
-    await api.setProcessingSpeed(value);
+  const clearCompleted = async () => {
+    await api.clearCompleted();
     refresh();
   };
 
-  const clearCompleted = async () => {
-    await api.clearCompleted();
+  const clearStalled = async () => {
+    await api.clearStalled();
     refresh();
   };
 
@@ -147,8 +146,8 @@ export function useQueue(): UseQueueReturn {
     startWorker,
     stopWorker,
     setConcurrency,
-    setProcessingSpeed,
     clearCompleted,
+    clearStalled,
     clearFailed,
     clearAll,
     runBenchmark,

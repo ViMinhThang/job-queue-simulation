@@ -20,8 +20,8 @@ export interface QueueAPI {
   startWorker: () => Promise<void>;
   stopWorker: () => Promise<void>;
   setConcurrency: (value: number) => Promise<void>;
-  setProcessingSpeed: (value: number) => Promise<void>;
   clearCompleted: () => Promise<void>;
+  clearStalled: () => Promise<void>;
   clearFailed: () => Promise<void>;
   clearAll: () => Promise<void>;
   runBenchmark: (config: BenchmarkConfig) => Promise<{ total: number }>;
@@ -111,20 +111,18 @@ const realAPI: QueueAPI = {
     if (!res.ok) throw new Error('Failed to set concurrency');
   },
 
-  async setProcessingSpeed(value: number) {
-    const res = await fetch(`${API_BASE}/worker/speed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value }),
-    });
-    if (!res.ok) throw new Error('Failed to set processing speed');
-  },
-
   async clearCompleted() {
     const res = await fetch(`${API_BASE}/queue/completed`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to clear completed');
+  },
+
+  async clearStalled() {
+    const res = await fetch(`${API_BASE}/queue/stalled`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear stalled');
   },
 
   async clearFailed() {

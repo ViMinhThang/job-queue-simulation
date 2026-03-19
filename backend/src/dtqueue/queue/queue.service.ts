@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RedisConnectionService } from '../redis-connection/redis-connection.service';
 import { randomUUID } from 'node:crypto';
-import { Job, JobOptions, PayLoadType } from './interfaces/queue-job';
+import { Job, JobOptions, JobState, PayLoadType } from './interfaces/queue-job';
 import { EventEmitter } from 'node:events';
 
 export interface QueueStats {
@@ -18,6 +18,13 @@ export const STALL_THRESHOLD_SECONDS = 30;
 @Injectable()
 export class QueueService extends EventEmitter {
   private readonly logger = new Logger(QueueService.name);
+  private readonly queueByState: Record<JobState, string> = {
+    waiting: 'waitingQueue',
+    processing: 'processingQueue',
+    stalled: 'stalledQueue',
+    completed: 'completedQueue',
+    failed: 'failedQueue',
+  };
 
   constructor(private readonly redis: RedisConnectionService) {
     super();
@@ -38,30 +45,21 @@ export class QueueService extends EventEmitter {
       payload: payload,
       options: options,
     };
-    await this.redis.client.rpush('waitingQueue', JSON.stringify(job));
+    await this.redis.client.rpush(this.queueByState.waiting, JSON.stringify(job));
     this.logger.log(`${jobName} has been added`);
     this.emit('added', job);
     return job;
   }
 
   async getStats(): Promise<QueueStats> {
-    const [waiting, processing, completed, failed, lastRecovered] = await Promise.all([
-      this.redis.client.llen('waitingQueue'),
-      this.redis.client.llen('processingQueue'),
-      this.redis.client.llen('completedQueue'),
-      this.redis.client.llen('failedQueue'),
+    const [waiting, processing, completed, failed, stalled, lastRecovered] = await Promise.all([
+      this.redis.client.llen(this.queueByState.waiting),
+      this.redis.client.llen(this.queueByState.processing),
+      this.redis.client.llen(this.queueByState.completed),
+      this.redis.client.llen(this.queueByState.failed),
+      this.redis.client.llen(this.queueByState.stalled),
       this.redis.client.get('stats:last_stalled_recovery'),
     ]);
-
-    const processingJobs = await this.redis.client.lrange('processingQueue', 0, -1);
-    let stalled = 0;
-    const now = new Date().getTime();
-    for (const jobStr of processingJobs) {
-      const job = JSON.parse(jobStr) as Job<PayLoadType>;
-      if ((now - new Date(job.timeIn).getTime()) / 1000 > STALL_THRESHOLD_SECONDS) {
-        stalled++;
-      }
-    }
 
     return {
       waiting,
@@ -69,14 +67,20 @@ export class QueueService extends EventEmitter {
       completed,
       failed,
       stalled,
-      lastRecoveredCount: parseInt(lastRecovered || '0'),
+      lastRecoveredCount: parseInt(lastRecovered || '0', 10) || 0,
     };
   }
 
-  async getAllJobs(state?: string): Promise<Job<PayLoadType>[]> {
+  async getAllJobs(state?: JobState): Promise<Job<PayLoadType>[]> {
     const queueNames = state
-      ? [`${state}Queue`]
-      : ['waitingQueue', 'processingQueue', 'completedQueue', 'failedQueue'];
+      ? [this.queueByState[state]]
+      : [
+          this.queueByState.waiting,
+          this.queueByState.processing,
+          this.queueByState.stalled,
+          this.queueByState.completed,
+          this.queueByState.failed,
+        ];
 
     const allJobs: Job<PayLoadType>[] = [];
 
@@ -85,13 +89,14 @@ export class QueueService extends EventEmitter {
       for (const item of items) {
         try {
           const job = JSON.parse(item) as Job<PayLoadType>;
-          if (queueName === 'waitingQueue') job.state = 'waiting';
-          else if (queueName === 'processingQueue') job.state = 'processing';
-          else if (queueName === 'completedQueue') job.state = 'completed';
-          else if (queueName === 'failedQueue') job.state = 'failed';
+          if (queueName === this.queueByState.waiting) job.state = 'waiting';
+          else if (queueName === this.queueByState.processing) job.state = 'processing';
+          else if (queueName === this.queueByState.stalled) job.state = 'stalled';
+          else if (queueName === this.queueByState.completed) job.state = 'completed';
+          else if (queueName === this.queueByState.failed) job.state = 'failed';
 
           allJobs.push(job);
-        } catch (e) {
+        } catch {
           this.logger.error(`Failed to parse job from ${queueName}:`, item);
         }
       }
@@ -102,7 +107,7 @@ export class QueueService extends EventEmitter {
 
 
   async deleteJob(id: string): Promise<void> {
-    const queueNames = ['waitingQueue', 'processingQueue', 'completedQueue', 'failedQueue'];
+    const queueNames = Object.values(this.queueByState);
     for (const queueName of queueNames) {
       const items = await this.redis.client.lrange(queueName, 0, -1);
       for (const item of items) {
@@ -116,18 +121,23 @@ export class QueueService extends EventEmitter {
   }
 
   async clearCompleted(): Promise<void> {
-    await this.redis.client.del('completedQueue');
+    await this.redis.client.del(this.queueByState.completed);
   }
 
   async clearFailed(): Promise<void> {
-    await this.redis.client.del('failedQueue');
+    await this.redis.client.del(this.queueByState.failed);
+  }
+
+  async clearStalled(): Promise<void> {
+    await this.redis.client.del(this.queueByState.stalled);
   }
 
   async clearAll(): Promise<void> {
-    await this.redis.client.del('waitingQueue');
-    await this.redis.client.del('processingQueue');
-    await this.redis.client.del('completedQueue');
-    await this.redis.client.del('failedQueue');
+    await this.redis.client.del(this.queueByState.waiting);
+    await this.redis.client.del(this.queueByState.processing);
+    await this.redis.client.del(this.queueByState.stalled);
+    await this.redis.client.del(this.queueByState.completed);
+    await this.redis.client.del(this.queueByState.failed);
     await this.redis.client.del('stats:last_stalled_recovery');
   }
 }

@@ -112,6 +112,7 @@ export default function Dashboard() {
     stopWorker,
     setConcurrency,
     clearCompleted,
+    clearStalled,
     clearFailed,
     clearAll,
     runBenchmark,
@@ -201,6 +202,7 @@ export default function Dashboard() {
             onStopWorker={stopWorker}
             onSetConcurrency={setConcurrency}
             onClearCompleted={clearCompleted}
+            onClearStalled={clearStalled}
             onClearFailed={clearFailed}
             onClearAll={clearAll}
           />

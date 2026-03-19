@@ -17,6 +17,7 @@ interface WorkerControlsProps {
   onStopWorker: () => Promise<void>;
   onSetConcurrency: (value: number) => Promise<void>;
   onClearCompleted: () => Promise<void>;
+  onClearStalled: () => Promise<void>;
   onClearFailed: () => Promise<void>;
   onClearAll: () => Promise<void>;
 }
@@ -28,6 +29,7 @@ export function WorkerControls({
   onStopWorker,
   onSetConcurrency,
   onClearCompleted,
+  onClearStalled,
   onClearFailed,
   onClearAll,
 }: WorkerControlsProps) {
@@ -103,12 +105,12 @@ export function WorkerControls({
 
         <div className="space-y-3 pt-2">
           <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/70">Clear Queue</div>
-          <div className="flex items-center gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Button 
               variant="outline" 
               size="sm" 
               onClick={onClearCompleted}
-              className="flex-1 px-3 py-2 h-auto"
+              className="px-3 py-2 h-auto"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Done
@@ -116,8 +118,17 @@ export function WorkerControls({
             <Button 
               variant="outline" 
               size="sm" 
+              onClick={onClearStalled}
+              className="px-3 py-2 h-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Stalled
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
               onClick={onClearFailed}
-              className="flex-1 px-3 py-2 h-auto"
+              className="px-3 py-2 h-auto"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Failed
@@ -126,7 +137,7 @@ export function WorkerControls({
               variant="outline" 
               size="sm" 
               onClick={onClearAll}
-              className="flex-1 px-3 py-2 h-auto"
+              className="px-3 py-2 h-auto"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               All
