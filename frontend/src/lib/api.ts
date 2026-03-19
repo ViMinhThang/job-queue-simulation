@@ -1,4 +1,4 @@
-import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig } from './types';
+import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig, Heartbeat } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -12,6 +12,7 @@ export interface QueueAPI {
   getJobsByState: (state: JobState) => Promise<Job[]>;
   getQueueStats: () => Promise<QueueStats>;
   getWorkerStatus: () => Promise<WorkerStatus>;
+  getHeartbeats: () => Promise<Heartbeat[]>;
   getSimulationStatus: () => Promise<SimulationStatus>;
   spawnRandomJob: () => Promise<Job>;
   addJob: (request: AddJobRequest) => Promise<Job>;
@@ -49,6 +50,12 @@ const realAPI: QueueAPI = {
   async getWorkerStatus() {
     const res = await fetch(`${API_BASE}/worker/status`);
     if (!res.ok) throw new Error('Failed to fetch worker status');
+    return res.json();
+  },
+
+  async getHeartbeats() {
+    const res = await fetch(`${API_BASE}/worker/heartbeats`);
+    if (!res.ok) throw new Error('Failed to fetch heartbeats');
     return res.json();
   },
 

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig } from '@/lib/types';
+import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig, Heartbeat } from '@/lib/types';
 import { useQueueAPI, SimulationStatus } from '@/lib/api';
 
 interface UseQueueReturn {
   jobs: Job[];
   stats: QueueStats;
   workerStatus: WorkerStatus;
+  heartbeats: Heartbeat[];
   simulationStatus: SimulationStatus;
   isLoading: boolean;
   error: string | null;
@@ -36,6 +37,7 @@ export function useQueue(): UseQueueReturn {
     jobsProcessedPerMinute: 0,
     averageWaitTime: 0,
   });
+  const [heartbeats, setHeartbeats] = useState<Heartbeat[]>([]);
   const [simulationStatus, setSimulationStatus] = useState<SimulationStatus>({
     isSimulating: false,
     simulateRate: 3000,
@@ -46,16 +48,18 @@ export function useQueue(): UseQueueReturn {
   const refresh = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [jobsData, statsData, workerData, simData] = await Promise.all([
+      const [jobsData, statsData, workerData, simData, heartbeatsData] = await Promise.all([
         api.getAllJobs(),
         api.getQueueStats(),
         api.getWorkerStatus(),
         api.getSimulationStatus(),
+        api.getHeartbeats(),
       ]);
       setJobs(jobsData);
       setStats(statsData);
       setWorkerStatus(workerData);
       setSimulationStatus(simData);
+      setHeartbeats(heartbeatsData);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -133,6 +137,7 @@ export function useQueue(): UseQueueReturn {
     jobs,
     stats,
     workerStatus,
+    heartbeats,
     simulationStatus,
     isLoading,
     error,

@@ -18,6 +18,11 @@ export class WorkerController {
     return this.workerService.getWorkerStatus();
   }
 
+  @Get('heartbeats')
+  getHeartbeats() {
+    return this.workerService.getActiveHeartbeats();
+  }
+
   @Post('concurrency')
   setConcurrency(@Body() body: { value: number }) {
     this.workerService.setConcurrency(body.value);

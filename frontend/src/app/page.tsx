@@ -7,6 +7,7 @@ import { StatsCard } from '@/components/queue/stats-card';
 import { KanbanBoard } from '@/components/queue/kanban-board';
 import { AddJobDialog } from '@/components/queue/add-job-dialog';
 import { BenchmarkDialog } from '@/components/queue/benchmark-dialog';
+import { HeartbeatPanel } from '@/components/worker/heartbeat-panel';
 import { WorkerControls } from '@/components/worker/worker-controls';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,6 +101,7 @@ export default function Dashboard() {
     jobs,
     stats,
     workerStatus,
+    heartbeats,
     simulationStatus,
     isLoading,
     error,
@@ -315,6 +317,7 @@ export default function Dashboard() {
           onOpenChange={setIsBenchmarkDialogOpen}
           onRunBenchmark={runBenchmark}
         />
+        <HeartbeatPanel heartbeats={heartbeats} />
       </div>
     </DndContext>
   );

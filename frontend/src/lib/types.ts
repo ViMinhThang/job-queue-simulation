@@ -115,3 +115,8 @@ export interface BenchmarkConfig {
   failed: { count: number; processingTime: number };
   stalled: { count: number; processingTime: number };
 }
+
+export interface Heartbeat {
+  jobId: string;
+  lastPing: number;
+}

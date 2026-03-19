@@ -181,6 +181,19 @@ export class WorkerService extends EventEmitter {
     };
   }
 
+  async getActiveHeartbeats(): Promise<{ jobId: string; lastPing: number }[]> {
+    const keys = await this.redis.client.keys('heartbeat:*');
+    if (keys.length === 0) return [];
+    
+    const values = await this.redis.client.mget(keys);
+    return keys
+      .map((key, i) => ({
+        jobId: key.replace('heartbeat:', ''),
+        lastPing: Number(values[i]),
+      }))
+      .sort((a, b) => b.lastPing - a.lastPing); // Newest ping first
+  }
+
   setConcurrency(value: number) {
     this.concurrency = Math.max(1, Math.min(10, value));
   }
