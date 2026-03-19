@@ -6,10 +6,11 @@ import { cn } from '@/lib/utils';
 import { StatsCard } from '@/components/queue/stats-card';
 import { KanbanBoard } from '@/components/queue/kanban-board';
 import { AddJobDialog } from '@/components/queue/add-job-dialog';
+import { BenchmarkDialog } from '@/components/queue/benchmark-dialog';
 import { WorkerControls } from '@/components/worker/worker-controls';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Clock, Loader2, CheckCircle2, XCircle, RefreshCw, Plus, AlertTriangle, GripVertical, Sparkles } from 'lucide-react';
+import { Clock, Loader2, CheckCircle2, XCircle, RefreshCw, Plus, AlertTriangle, GripVertical, Sparkles, Zap } from 'lucide-react';
 import { generateRandomPayload } from '@/lib/types';
 import {
   DndContext,
@@ -77,6 +78,7 @@ export default function Dashboard() {
   const [topPanelsOrder, setTopPanelsOrder] = useState(TOP_PANELS);
   const [bottomPanelsOrder, setBottomPanelsOrder] = useState(BOTTOM_PANELS);
   const [isAddJobDialogOpen, setIsAddJobDialogOpen] = useState(false);
+  const [isBenchmarkDialogOpen, setIsBenchmarkDialogOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const sensors = useSensors(
@@ -110,6 +112,7 @@ export default function Dashboard() {
     clearCompleted,
     clearFailed,
     clearAll,
+    runBenchmark,
     refresh,
   } = useQueue();
 
@@ -243,6 +246,10 @@ export default function Dashboard() {
                 <Sparkles className="h-4 w-4 mr-2" />
                 Quick Random
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsBenchmarkDialogOpen(true)} disabled={isLoading}>
+                <Zap className="h-4 w-4 mr-2" />
+                Benchmark
+              </Button>
               <Button size="sm" onClick={() => setIsAddJobDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Job
@@ -302,6 +309,11 @@ export default function Dashboard() {
               },
             });
           }}
+        />
+        <BenchmarkDialog
+          open={isBenchmarkDialogOpen}
+          onOpenChange={setIsBenchmarkDialogOpen}
+          onRunBenchmark={runBenchmark}
         />
       </div>
     </DndContext>

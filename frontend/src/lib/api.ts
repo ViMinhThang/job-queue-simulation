@@ -1,4 +1,4 @@
-import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState } from './types';
+import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -23,6 +23,7 @@ export interface QueueAPI {
   clearCompleted: () => Promise<void>;
   clearFailed: () => Promise<void>;
   clearAll: () => Promise<void>;
+  runBenchmark: (config: BenchmarkConfig) => Promise<{ total: number }>;
   subscribe: (listener: () => void) => () => void;
 }
 
@@ -131,6 +132,16 @@ const realAPI: QueueAPI = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to clear all');
+  },
+
+  async runBenchmark(config: BenchmarkConfig) {
+    const res = await fetch(`${API_BASE}/queue/benchmark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) throw new Error('Failed to run benchmark');
+    return res.json();
   },
 
   subscribe() {

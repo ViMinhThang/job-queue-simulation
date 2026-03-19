@@ -67,4 +67,49 @@ export class QueueController {
   clearAll() {
     return this.queueService.clearAll();
   }
+
+  @Post('benchmark')
+  async runBenchmark(
+    @Body()
+    body: {
+      success: { count: number; processingTime: number };
+      failed: { count: number; processingTime: number };
+      stalled: { count: number; processingTime: number };
+    },
+  ) {
+    const jobs: Promise<any>[] = [];
+
+    for (let i = 0; i < body.success.count; i++) {
+      jobs.push(
+        this.queueService.addJob(
+          'benchmark_success',
+          { processingTime: body.success.processingTime },
+          { retryTime: 3 },
+        ),
+      );
+    }
+
+    for (let i = 0; i < body.failed.count; i++) {
+      jobs.push(
+        this.queueService.addJob(
+          'failMe',
+          { processingTime: body.failed.processingTime },
+          { retryTime: 3 },
+        ),
+      );
+    }
+
+    for (let i = 0; i < body.stalled.count; i++) {
+      jobs.push(
+        this.queueService.addJob(
+          'stallMe',
+          { processingTime: body.stalled.processingTime },
+          { retryTime: 3 },
+        ),
+      );
+    }
+
+    await Promise.all(jobs);
+    return { total: jobs.length };
+  }
 }

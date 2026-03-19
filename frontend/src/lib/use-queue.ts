@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState } from '@/lib/types';
+import { Job, QueueStats, WorkerStatus, AddJobRequest, JobState, BenchmarkConfig } from '@/lib/types';
 import { useQueueAPI, SimulationStatus } from '@/lib/api';
 
 interface UseQueueReturn {
@@ -21,6 +21,7 @@ interface UseQueueReturn {
   clearCompleted: () => Promise<void>;
   clearFailed: () => Promise<void>;
   clearAll: () => Promise<void>;
+  runBenchmark: (config: BenchmarkConfig) => Promise<void>;
   refresh: () => void;
 }
 
@@ -123,6 +124,11 @@ export function useQueue(): UseQueueReturn {
     refresh();
   };
 
+  const runBenchmark = async (config: BenchmarkConfig) => {
+    await api.runBenchmark(config);
+    refresh();
+  };
+
   return {
     jobs,
     stats,
@@ -140,6 +146,7 @@ export function useQueue(): UseQueueReturn {
     clearCompleted,
     clearFailed,
     clearAll,
+    runBenchmark,
     refresh,
   };
 }

@@ -109,3 +109,9 @@ export function generateRandomPayload(jobName: string): Record<string, unknown> 
     },
   };
 }
+
+export interface BenchmarkConfig {
+  success: { count: number; processingTime: number };
+  failed: { count: number; processingTime: number };
+  stalled: { count: number; processingTime: number };
+}
