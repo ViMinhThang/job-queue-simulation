@@ -11,7 +11,7 @@ export function OutputPanel({ job, output }: OutputPanelProps) {
   if (!job) {
     return React.createElement(
       Box,
-      { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column", height: 10 },
+      { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column", height: 6 },
       React.createElement(Text, { dimColor: true }, "Select a job to view output"),
     );
   }
@@ -22,12 +22,12 @@ export function OutputPanel({ job, output }: OutputPanelProps) {
   ];
 
   // Show last lines that fit
-  const maxLines = 8;
+  const maxLines = 4;
   const visibleLines = allLines.slice(-maxLines);
 
   return React.createElement(
     Box,
-    { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column", height: 10 },
+    { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column", height: 6 },
     React.createElement(
       Text,
       { bold: true },

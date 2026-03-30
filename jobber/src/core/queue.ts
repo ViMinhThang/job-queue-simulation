@@ -1,5 +1,6 @@
 import type Redis from "ioredis";
 import { QUEUE_KEYS, type Job, type JobState, type QueueStats, createJob } from "./types.js";
+import { config } from "./config.js";
 
 const KEY_TO_STATE = new Map(
   Object.entries(QUEUE_KEYS).map(([state, key]) => [key, state as JobState]),
@@ -98,6 +99,24 @@ export class Queue {
       return;
     }
     await this.redis.del(QUEUE_KEYS[state]);
+  }
+
+  async getJobHeartbeatTTLs(jobIds: string[]): Promise<Record<string, number>> {
+    const pipeline = this.redis.pipeline();
+    for (const id of jobIds) {
+      pipeline.ttl(`${config.queue.prefix}heartbeat:${id}`);
+    }
+    const results = await pipeline.exec();
+    const heartbeats: Record<string, number> = {};
+    if (!results) return heartbeats;
+
+    results.forEach((res, i) => {
+      const [err, ttl] = res;
+      if (!err && typeof ttl === "number" && ttl > 0) {
+        heartbeats[jobIds[i]!] = ttl;
+      }
+    });
+    return heartbeats;
   }
 
   async retryJob(id: string): Promise<boolean> {

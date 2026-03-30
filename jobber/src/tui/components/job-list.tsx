@@ -5,6 +5,7 @@ import type { Job } from "../../core/types.js";
 interface JobListProps {
   jobs: Job[];
   selected: number;
+  interactionMode: "command" | "nav";
 }
 
 const SPINNERS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -18,65 +19,66 @@ function Spinner() {
   return React.createElement(Text, { color: "yellow" }, SPINNERS[frame]);
 }
 
-const STATE_ICONS: Record<string, { icon: string; color: string }> = {
-  waiting: { icon: "○", color: "gray" },
-  completed: { icon: "✓", color: "green" },
-  failed: { icon: "✗", color: "red" },
-  stalled: { icon: "△", color: "yellow" },
-};
-
-const STATE_LABELS: Record<string, (job: Job) => { text: string; color: string }> = {
-  processing: () => ({ text: "running", color: "yellow" }),
-  completed: () => ({ text: "✓ done", color: "green" }),
-  failed: (job) => ({ text: `✗ failed${job.exitCode !== null ? ` (${job.exitCode})` : ""}`, color: "red" }),
-  stalled: () => ({ text: "△ stalled", color: "yellow" }),
-};
-
-function JobRow({ job, isSelected }: { job: Job; isSelected: boolean }) {
-  const icon = STATE_ICONS[job.state];
-  const label = STATE_LABELS[job.state]?.(job) ?? { text: "waiting", color: "gray" };
+function JobItem({ job, isSelected, interactionMode }: { job: Job; isSelected: boolean, interactionMode: "command" | "nav" }) {
+  const shortId = job.id.slice(0, 4);
+  const color = isSelected && interactionMode === "nav" ? "white" : undefined;
+  const bgColor = isSelected && interactionMode === "nav" ? "blue" : undefined;
 
   return React.createElement(
     Box,
-    { key: job.id },
-    React.createElement(
-      Text,
-      { color: isSelected ? "cyan" : undefined, bold: isSelected },
-      isSelected ? "▸ " : "  ",
-    ),
-    job.state === "processing"
-      ? React.createElement(Spinner)
-      : React.createElement(Text, { color: icon?.color }, icon?.icon ?? "?"),
-    React.createElement(Text, null, " "),
-    React.createElement(
-      Text,
-      { color: isSelected ? "white" : undefined, bold: isSelected, wrap: "truncate-end" },
-      job.name,
-    ),
-    React.createElement(Text, { dimColor: true }, " "),
-    React.createElement(Text, { color: label.color }, label.text),
+    { key: job.id, paddingX: 1, backgroundColor: bgColor },
+    React.createElement(Text, { dimColor: !isSelected || interactionMode !== "nav", color: isSelected && interactionMode === "nav" ? "cyan" : "gray" }, `[${shortId}] `),
+    job.state === "processing" && React.createElement(Spinner),
+    React.createElement(Text, { color, bold: isSelected && interactionMode === "nav", wrap: "truncate-end" }, ` ${job.name}`),
   );
 }
 
-export function JobList({ jobs, selected }: JobListProps) {
+function Column({ title, color, children, count }: { title: string; color: string; children?: React.ReactNode; count: number }) {
+  return React.createElement(
+    Box,
+    { flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 20 },
+    React.createElement(
+      Box,
+      { borderStyle: "single", borderColor: color, paddingX: 1, justifyContent: "space-between" },
+      React.createElement(Text, { color, bold: true }, title),
+      React.createElement(Text, { dimColor: true }, count.toString())
+    ),
+    React.createElement(Box, { flexDirection: "column", paddingTop: 1 }, children)
+  );
+}
+
+export function JobList({ jobs, selected, interactionMode }: JobListProps) {
   if (jobs.length === 0) {
     return React.createElement(
       Box,
-      { borderStyle: "round", borderColor: "gray", paddingX: 1, flexGrow: 1 },
-      React.createElement(Text, { dimColor: true }, "No jobs. Press [a] to add a command."),
+      { borderStyle: "round", borderColor: "gray", paddingX: 1, flexGrow: 1, justifyContent: "center", alignItems: "center" },
+      React.createElement(Text, { dimColor: true }, "No jobs. Type a command to start!"),
     );
   }
 
+  const waiting = jobs.filter(j => j.state === "waiting");
+  const processing = jobs.filter(j => j.state === "processing");
+  const completed = jobs.filter(j => j.state === "completed");
+  const failed = jobs.filter(j => j.state === "failed");
+  const stalled = jobs.filter(j => j.state === "stalled");
+
+  const selectedJob = jobs[selected];
+
+  const renderJob = (job: Job) => 
+    React.createElement(JobItem, { 
+      key: job.id, 
+      job, 
+      isSelected: selectedJob?.id === job.id,
+      interactionMode
+    });
+
   return React.createElement(
     Box,
-    { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column", flexGrow: 1 },
-    React.createElement(Text, { dimColor: true }, `Jobs (${jobs.length})`),
-    ...jobs.map((job, i) =>
-      React.createElement(JobRow, {
-        key: job.id,
-        job,
-        isSelected: i === selected,
-      }),
-    ),
+    { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "row", flexGrow: 1, gap: 1 },
+    React.createElement(Column, { title: "Waiting", color: "gray", count: waiting.length }, waiting.map(renderJob)),
+    React.createElement(Column, { title: "Running", color: "yellow", count: processing.length }, processing.map(renderJob)),
+    React.createElement(Column, { title: "Completed", color: "green", count: completed.length }, completed.map(renderJob)),
+    React.createElement(Column, { title: "Failed", color: "red", count: failed.length }, failed.map(renderJob)),
+    React.createElement(Column, { title: "Stalled", color: "yellow", count: stalled.length }, stalled.map(renderJob)),
   );
 }
