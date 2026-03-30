@@ -1,0 +1,29 @@
+{
+  "name": "jobber",
+  "version": "1.0.0",
+  "description": "CLI job queue manager with interactive TUI. Enqueue shell commands, watch them run.",
+  "type": "module",
+  "bin": {
+    "jobber": "./bin/jobber.mjs"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "start": "node dist/cli/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "dotenv": "^17.3.1",
+    "ink": "^6.8.0",
+    "ink-text-input": "^6.0.0",
+    "ioredis": "^5.10.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}
