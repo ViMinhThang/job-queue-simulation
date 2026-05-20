@@ -1,28 +1,35 @@
 {
-  "name": "jobber",
-  "version": "1.0.0",
-  "description": "CLI job queue manager with interactive TUI. Enqueue shell commands, watch them run.",
+  "name": "queue-lab",
+  "version": "0.1.0",
+  "description": "Small educational TypeScript queue library for studying async concurrency.",
   "type": "module",
-  "bin": {
-    "jobber": "./bin/jobber.mjs"
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
+  "files": [
+    "dist/index.*",
+    "dist/queue.*",
+    "dist/worker.*",
+    "dist/types.*",
+    "dist/errors.*",
+    "dist/job.*",
+    "README.md",
+    "examples"
+  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/cli/index.ts",
-    "start": "node dist/cli/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "example": "npm run build && tsx examples/concurrency-demo.ts"
   },
-  "dependencies": {
-    "commander": "^12.0.0",
-    "dotenv": "^17.3.1",
-    "ink": "^6.8.0",
-    "ink-text-input": "^6.0.0",
-    "ioredis": "^5.10.0",
-    "react": "^19.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "@types/react": "^19.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.7.0"
   }
