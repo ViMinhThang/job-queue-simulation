@@ -1,4 +1,4 @@
-export type JobState = "waiting" | "delayed" | "active" | "completed" | "failed";
+export type JobState = "waiting" | "delayed" | "active" | "stalled" | "completed" | "failed";
 
 export interface JobOptions {
   /**
@@ -24,11 +24,14 @@ export interface Job<Data = unknown, Result = unknown> {
   state: JobState;
   attemptsMade: number;
   maxAttempts: number;
+  stalledCount: number;
   backoffMs?: JobOptions["backoffMs"];
+  lockToken?: string;
   createdAt: Date;
   updatedAt: Date;
   startedAt?: Date;
   finishedAt?: Date;
+  lastHeartbeatAt?: Date;
   delayUntil?: Date;
   result?: Result;
   error?: SerializedError;
@@ -44,6 +47,7 @@ export interface QueueStats {
   waiting: number;
   delayed: number;
   active: number;
+  stalled: number;
   completed: number;
   failed: number;
   total: number;
@@ -51,6 +55,9 @@ export interface QueueStats {
 
 export interface WorkerOptions {
   concurrency?: number;
+  heartbeatIntervalMs?: number;
+  stallCheckIntervalMs?: number;
+  stallTimeoutMs?: number;
   /**
    * Start immediately by default so examples stay short. Set this to false
    * when a test wants to subscribe to events before work begins.

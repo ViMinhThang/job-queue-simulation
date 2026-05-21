@@ -17,6 +17,7 @@ export function createJob<Data, Result>(
     state: "waiting",
     attemptsMade: 0,
     maxAttempts: Math.max(1, Math.floor(options.attempts ?? 1)),
+    stalledCount: 0,
     backoffMs: options.backoffMs,
     createdAt: now,
     updatedAt: now,

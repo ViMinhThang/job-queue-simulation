@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Queue, Worker } from "../src/index.js";
+import { Queue, StaleJobError, Worker } from "../src/index.js";
 
 test("worker never runs more than the configured concurrency", async () => {
   const queue = new Queue<number, number>("bounded");
@@ -67,6 +67,50 @@ test("pause keeps jobs waiting until resume releases backpressure", async () => 
   await worker.close();
 
   assert.equal(queue.getStats().completed, 1);
+});
+
+test("worker heartbeats while a job is active", async () => {
+  const queue = new Queue<number, number>("heartbeats");
+  let heartbeatCount = 0;
+
+  queue.on("heartbeat", () => {
+    heartbeatCount += 1;
+  });
+
+  const worker = new Worker(
+    queue,
+    async (job) => {
+      await sleep(35);
+      return job.data;
+    },
+    { heartbeatIntervalMs: 5, stallTimeoutMs: 100 },
+  );
+
+  const job = await queue.add("keepalive", 1);
+  await queue.waitForIdle({ timeoutMs: 1_000 });
+  await worker.close();
+
+  assert.ok(heartbeatCount > 1);
+  assert.equal(queue.getJob(job.id)?.state, "completed");
+});
+
+test("stalled recovery requeues an active job whose heartbeat expired", async () => {
+  const queue = new Queue<number, number>("stalled");
+  const added = await queue.add("stalls", 1, { attempts: 2 });
+  const active = await queue.take();
+
+  await sleep(20);
+  const recovered = queue.recoverStalled(5);
+
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0]?.id, added.id);
+  assert.equal(recovered[0]?.stalledCount, 1);
+  assert.equal(queue.getStats().waiting, 1);
+
+  await assert.rejects(
+    () => queue.complete(active.id, 1, active.lockToken),
+    StaleJobError,
+  );
 });
 
 function sleep(ms: number) {

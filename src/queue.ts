@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
-import { QueueClosedError, TimeoutError } from "./errors.js";
+import { randomUUID } from "node:crypto";
+import { QueueClosedError, StaleJobError, TimeoutError } from "./errors.js";
 import { createJob, serializeError, snapshotJob } from "./job.js";
 import type { Job, JobOptions, JobState, QueueStats, WaitForIdleOptions } from "./types.js";
 
@@ -70,10 +71,13 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
     });
   }
 
-  async complete(jobId: string, result: Result): Promise<Job<Data, Result>> {
+  async complete(jobId: string, result: Result, lockToken?: string): Promise<Job<Data, Result>> {
     const job = this.getExistingJob(jobId);
+    this.ensureJobOwned(job, lockToken);
     job.state = "completed";
     job.result = result;
+    job.lockToken = undefined;
+    job.lastHeartbeatAt = undefined;
     job.finishedAt = new Date();
     job.updatedAt = job.finishedAt;
 
@@ -82,10 +86,13 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
     return snapshotJob(job);
   }
 
-  async fail(jobId: string, error: unknown): Promise<Job<Data, Result>> {
+  async fail(jobId: string, error: unknown, lockToken?: string): Promise<Job<Data, Result>> {
     const job = this.getExistingJob(jobId);
+    this.ensureJobOwned(job, lockToken);
     job.state = "failed";
     job.error = serializeError(error);
+    job.lockToken = undefined;
+    job.lastHeartbeatAt = undefined;
     job.finishedAt = new Date();
     job.updatedAt = job.finishedAt;
 
@@ -94,9 +101,12 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
     return snapshotJob(job);
   }
 
-  async retry(jobId: string, error: unknown, backoffMs = 0): Promise<Job<Data, Result>> {
+  async retry(jobId: string, error: unknown, backoffMs = 0, lockToken?: string): Promise<Job<Data, Result>> {
     const job = this.getExistingJob(jobId);
+    this.ensureJobOwned(job, lockToken);
     job.error = serializeError(error);
+    job.lockToken = undefined;
+    job.lastHeartbeatAt = undefined;
     job.startedAt = undefined;
     job.finishedAt = undefined;
 
@@ -108,6 +118,59 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
 
     this.emit("retrying", snapshotJob(job));
     return snapshotJob(job);
+  }
+
+  heartbeat(jobId: string, lockToken?: string): Job<Data, Result> | undefined {
+    const job = this.jobs.get(jobId);
+    if (!job || job.state !== "active") return undefined;
+    this.ensureJobOwned(job, lockToken);
+
+    job.lastHeartbeatAt = new Date();
+    job.updatedAt = job.lastHeartbeatAt;
+    this.emit("heartbeat", snapshotJob(job));
+    return snapshotJob(job);
+  }
+
+  recoverStalled(stallTimeoutMs: number): Job<Data, Result>[] {
+    const recovered: Job<Data, Result>[] = [];
+    const now = Date.now();
+
+    for (const job of this.jobs.values()) {
+      if (job.state !== "active") continue;
+
+      const lastHeartbeatAt = job.lastHeartbeatAt?.getTime() ?? job.startedAt?.getTime() ?? 0;
+      if (now - lastHeartbeatAt <= stallTimeoutMs) continue;
+
+      /**
+       * A stalled job is a lease that expired. Clearing the lock token is what
+       * prevents the old worker from completing a stale copy after recovery.
+       */
+      job.state = "stalled";
+      job.stalledCount += 1;
+      job.lockToken = undefined;
+      job.lastHeartbeatAt = undefined;
+      job.startedAt = undefined;
+      job.updatedAt = new Date();
+      this.emit("stalled", snapshotJob(job));
+
+      if (job.attemptsMade < job.maxAttempts) {
+        this.enqueue(job);
+      } else {
+        job.state = "failed";
+        job.error = {
+          name: "StalledJobError",
+          message: `Job stalled after ${job.attemptsMade} attempt(s).`,
+        };
+        job.finishedAt = new Date();
+        job.updatedAt = job.finishedAt;
+        this.emit("failed", snapshotJob(job));
+      }
+
+      recovered.push(snapshotJob(job));
+    }
+
+    this.emitIdleIfNeeded();
+    return recovered;
   }
 
   pause(): void {
@@ -139,6 +202,7 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
       waiting: 0,
       delayed: 0,
       active: 0,
+      stalled: 0,
       completed: 0,
       failed: 0,
       total: this.jobs.size,
@@ -201,6 +265,8 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
   private enqueue(job: Job<Data, Result>): void {
     job.state = "waiting";
     job.delayUntil = undefined;
+    job.lockToken = undefined;
+    job.lastHeartbeatAt = undefined;
     job.updatedAt = new Date();
     this.waiting.push(job);
     this.emit("waiting", snapshotJob(job));
@@ -235,7 +301,9 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
     const job = this.waiting.shift()!;
     job.state = "active";
     job.attemptsMade += 1;
+    job.lockToken = randomUUID();
     job.startedAt = new Date();
+    job.lastHeartbeatAt = job.startedAt;
     job.updatedAt = job.startedAt;
     this.emit("active", snapshotJob(job));
 
@@ -277,6 +345,12 @@ export class Queue<Data = unknown, Result = unknown> extends EventEmitter {
     const job = this.jobs.get(jobId);
     if (!job) throw new Error(`Job "${jobId}" does not exist.`);
     return job;
+  }
+
+  private ensureJobOwned(job: Job<Data, Result>, lockToken?: string): void {
+    if (lockToken && job.lockToken !== lockToken) {
+      throw new StaleJobError(job.id);
+    }
   }
 
   private removeConsumer(target: WaitingConsumer<Data, Result>): void {

@@ -18,3 +18,10 @@ export class TimeoutError extends Error {
     this.name = "TimeoutError";
   }
 }
+
+export class StaleJobError extends Error {
+  constructor(jobId: string) {
+    super(`Job "${jobId}" is no longer owned by this worker lane.`);
+    this.name = "StaleJobError";
+  }
+}
